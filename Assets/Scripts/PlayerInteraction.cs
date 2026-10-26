@@ -3,7 +3,7 @@ using UnityEngine.InputSystem;
 
 public class PlayerInteraction : MonoBehaviour
 {
-    [SerializeField] private float interactRadius = 1.5f;
+    [SerializeField] private float interactRadius = 0.5f;
     [SerializeField] private LayerMask interactableLayer;
     [SerializeField] private PlayerHands playerHands;
     [SerializeField] private InputAction interactAction;
@@ -28,9 +28,10 @@ public class PlayerInteraction : MonoBehaviour
         }
     }
 
-    /* private void OnDrawGizmosSelected()
+    // Used for debugging
+    private void OnDrawGizmosSelected()
     {
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(transform.position, interactRadius);
-    } */
+    }
 }

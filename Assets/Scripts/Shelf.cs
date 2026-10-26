@@ -34,6 +34,7 @@ public class Shelf : MonoBehaviour, IInteractable
 
     public string GetInteractionPrompt() => $"Shelf: {itemType.itemName} ({currentStock}/{maxStock})";
 
+    // Update shelf text on startup and hide text
     private void Start()
     {
         if (shelfText != null)
@@ -43,6 +44,7 @@ public class Shelf : MonoBehaviour, IInteractable
         }
     }
 
+    // Update text
     private void UpdateVisuals()
     {
         if (shelfText != null)
@@ -51,6 +53,7 @@ public class Shelf : MonoBehaviour, IInteractable
         }
     }
 
+    // When nearby, show text
     private void OnTriggerEnter2D(Collider2D collision)
     {
         if (shelfText != null)
@@ -59,6 +62,7 @@ public class Shelf : MonoBehaviour, IInteractable
         }
     }
 
+    // When leaving, hide text
     private void OnTriggerExit2D(Collider2D collision)
     {
         if (shelfText != null)

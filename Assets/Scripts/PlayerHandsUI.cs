@@ -29,17 +29,20 @@ public class PlayerHandsUI : MonoBehaviour
         }
     }
 
+    // Update hand slots on startup
     private void Start()
     {
         RefreshUI();
     }
 
+    // Updates both slots when invoked
     private void RefreshUI()
     {
         UpdateSlotGraphic(slot0Icon, slot0Text, playerHands.hands[0]);
         UpdateSlotGraphic(slot1Icon, slot1Text, playerHands.hands[1]);
     }
 
+    // Updates one given hand slot with passed in variables
     private void UpdateSlotGraphic(Image iconImage, TextMeshProUGUI itemText, ItemSO item)
     {
         if (item != null && item.icon != null)
