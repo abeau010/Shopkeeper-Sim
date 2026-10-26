@@ -1,9 +1,11 @@
 using UnityEngine;
+using System;
 
 public class PlayerHands : MonoBehaviour
 {
     // Player's hand slots
     public ItemSO[] hands = new ItemSO[2];
+    public event Action OnHandsChanged;
 
     // Function that checks if the player can hold the object
     public bool CanHold(ItemSO item)
@@ -58,8 +60,10 @@ public class PlayerHands : MonoBehaviour
 
     public void UpdateHandUI()
     {
-        string h0 = hands[0] != null ? hands[0].itemName : "Empty";
+        /* string h0 = hands[0] != null ? hands[0].itemName : "Empty";
         string h1 = hands[1] != null ? hands[1].itemName : "Empty";
-        Debug.Log($"[HANDS] Slot 0: {h0} | Slot 1: {h1}");
+        Debug.Log($"[HANDS] Slot 0: {h0} | Slot 1: {h1}"); */
+        // ^^ Use when debugging
+        OnHandsChanged?.Invoke();
     }
 }

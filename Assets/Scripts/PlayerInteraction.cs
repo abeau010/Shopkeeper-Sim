@@ -23,7 +23,8 @@ public class PlayerInteraction : MonoBehaviour
         if (hit != null && hit.TryGetComponent(out IInteractable interactable))
         {
             interactable.Interact(playerHands);
-            Debug.Log($"Interacted with target. Current status: {interactable.GetInteractionPrompt()}");
+            // Debug.Log($"Interacted with target. Current status: {interactable.GetInteractionPrompt()}");
+            // ^^ Use when debugging
         }
     }
 

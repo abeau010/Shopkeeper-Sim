@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemSO
   itemID: 1
   itemName: Box
-  icon: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  icon: {fileID: 7482667652216324306, guid: b9dd232e37cb8bb4fb98b30e51a73ea7, type: 3}
+  iconColor: {r: 0.381132, g: 0.18019871, b: 0.036674958, a: 1}
   isLarge: 1
   basePrice: 0
   currentPrice: 0

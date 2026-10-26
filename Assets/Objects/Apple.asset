@@ -14,7 +14,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ItemSO
   itemID: 0
   itemName: Apple
-  icon: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
+  icon: {fileID: -2413806693520163455, guid: f67b532ae58b154469c73e8edd73db25, type: 3}
+  iconColor: {r: 0.8627452, g: 0.07843138, b: 0.2352941, a: 1}
   isLarge: 0
   basePrice: 0
   currentPrice: 0
