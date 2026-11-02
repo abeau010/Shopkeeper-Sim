@@ -16,5 +16,5 @@ MonoBehaviour:
   itemName: Orange
   icon: {fileID: 10913, guid: 0000000000000000f000000000000000, type: 0}
   isLarge: 0
-  basePrice: 0
-  currentPrice: 0
+  basePrice: 3
+  currentPrice: 3

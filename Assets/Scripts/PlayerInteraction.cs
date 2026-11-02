@@ -12,7 +12,8 @@ public class PlayerInteraction : MonoBehaviour
 
     private void Update()
     {
-        if (interactAction.WasPressedThisFrame())
+        // Ignore E while the price picker is open
+        if (interactAction.WasPressedThisFrame() && !PriceSelectUI.IsOpen)
         {
             TryInteract();
         }
