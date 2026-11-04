@@ -12,12 +12,10 @@ public class ShopManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI statsText; // Optional - shows money/reputation
 
     public int Money { get; private set; }
-    public float Reputation => customersServed == 0 ? 50f : totalSatisfaction / (float)customersServed; // Average satisfaction of departed customers
+    public float Reputation { get; private set; } = 50f; // Moves with how much each customer's mood changed during their visit
     public event Action OnStatsChanged;
 
     private Shelf[] shelves;
-    private int totalSatisfaction;
-    private int customersServed;
 
     private void Awake()
     {
@@ -46,14 +44,17 @@ public class ShopManager : MonoBehaviour
         var items = new Dictionary<string, ShopItemData>();
         foreach (Shelf shelf in shelves)
         {
-            if (shelf.itemType == null) continue;
-            string itemName = shelf.itemType.itemName;
-            if (!items.TryGetValue(itemName, out ShopItemData data))
+            foreach (ShelfSlot slot in shelf.slots)
             {
-                data = new ShopItemData { name = itemName, price = GetPrice(shelf.itemType) };
-                items[itemName] = data;
+                if (slot.item == null) continue;
+                string itemName = slot.item.itemName;
+                if (!items.TryGetValue(itemName, out ShopItemData data))
+                {
+                    data = new ShopItemData { name = itemName, price = GetPrice(slot.item) };
+                    items[itemName] = data;
+                }
+                data.stock += slot.stock;
             }
-            data.stock += shelf.currentStock;
         }
         return new List<ShopItemData>(items.Values).ToArray();
     }
@@ -64,11 +65,19 @@ public class ShopManager : MonoBehaviour
         RefreshUI();
     }
 
-    // Called when a customer leaves for any reason
-    public void RecordCustomerExit(int satisfaction)
+    // Returns false and spends nothing if the player can't afford it
+    public bool TrySpendMoney(int amount)
     {
-        totalSatisfaction += satisfaction;
-        customersServed++;
+        if (Money < amount) return false;
+        Money -= amount;
+        RefreshUI();
+        return true;
+    }
+
+    // Called when a customer leaves for any reason
+    public void RecordCustomerExit(int moodChange)
+    {
+        Reputation = Mathf.Clamp(Reputation + moodChange, 0f, 100f);
         RefreshUI();
     }
 

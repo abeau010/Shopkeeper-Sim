@@ -19,11 +19,13 @@ public class Customer : MonoBehaviour, IInteractable
     private Vector3 exitPosition;
     private float waitTimer;
     private bool exitRecorded;
+    private int startingSatisfaction;
 
     // Called by CustomerSpawner right after the server creates this customer
     public void Init(CustomerData data, Vector3 standPos, Vector3 exitPos)
     {
         Data = data;
+        startingSatisfaction = data.satisfaction;
         standPosition = standPos;
         exitPosition = exitPos;
         state = State.WalkingIn;
@@ -68,14 +70,14 @@ public class Customer : MonoBehaviour, IInteractable
         UpdateLabel();
     }
 
-    // Walk out of the shop and record how happy they were
+    // Walk out of the shop and record how much their mood changed
     public void Leave()
     {
         if (state == State.WalkingOut) return;
         state = State.WalkingOut;
         if (!exitRecorded && ShopManager.Instance != null)
         {
-            ShopManager.Instance.RecordCustomerExit(Data.satisfaction);
+            ShopManager.Instance.RecordCustomerExit(Data.satisfaction - startingSatisfaction);
             exitRecorded = true;
         }
         UpdateLabel();
@@ -139,8 +141,8 @@ public class Customer : MonoBehaviour, IInteractable
     private void UpdateLabel()
     {
         if (speechLabel == null || Data == null) return;
-        string header = IsLeaving ? $"<b>{Data.name}</b>" : $"<b>{Data.name}</b> <size=70%>(wants {Data.wants})</size>";
-        speechLabel.text = string.IsNullOrEmpty(Data.say) ? header : $"<size=60%>\"{Data.say}\"</size>\n{header}";
+        string header = IsLeaving ? $"<b>{Data.name}</b>" : $"<b>{Data.name}</b> <size=85%>(wants {Data.wants})</size>";
+        speechLabel.text = string.IsNullOrEmpty(Data.say) ? header : $"<size=85%>\"{Data.say}\"</size>\n{header}";
     }
 
     // Speech text above the customer's head, grows upwards as lines get longer

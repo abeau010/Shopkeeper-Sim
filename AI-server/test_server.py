@@ -47,6 +47,13 @@ def test_spawn_random_character():
     assert spawn("")["character_id"] in server.CHARACTERS
 
 
+def test_spawn_asks_for_any_item_on_the_shelves():
+    shop = [{"name": "Water Bottle", "price": 2, "stock": 3}, {"name": "Candy Bar", "price": 2, "stock": 3}]
+    r = client.post("/customers/spawn", json={"character_id": "vinnie", "shop_items": shop}).json()
+    assert r["wants"] in ("Water Bottle", "Candy Bar")
+    assert r["wants"] in r["say"]
+
+
 def test_spawn_unknown_character_404():
     assert client.post("/customers/spawn", json={"character_id": "nobody"}).status_code == 404
 
