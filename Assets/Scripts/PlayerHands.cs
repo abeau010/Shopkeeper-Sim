@@ -6,6 +6,15 @@ public class PlayerHands : MonoBehaviour
     // Player's hand slots
     public ItemSO[] hands = new ItemSO[2];
     public event Action OnHandsChanged;
+    private int newestHand;
+
+    // Function that returns the slot of the most recently picked up item, or -1 if both hands are empty
+    public int GetNewestHand()
+    {
+        if (hands[newestHand] != null) return newestHand;
+        int otherHand = 1 - newestHand;
+        return hands[otherHand] != null ? otherHand : -1;
+    }
 
     // Function that checks if the player can hold the object
     public bool CanHold(ItemSO item)
@@ -25,14 +34,17 @@ public class PlayerHands : MonoBehaviour
         if (item.isLarge) // Takes both slots
         {
             hands[0] = hands[1] = item;
+            newestHand = 0;
         }
         else if (hands[0] == null) // First slot is empty
         {
             hands[0] = item;
+            newestHand = 0;
         }
         else // First slot is full
         {
             hands[1] = item;
+            newestHand = 1;
         }
 
         UpdateHandUI();
