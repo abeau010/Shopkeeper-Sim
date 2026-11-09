@@ -1,0 +1,82 @@
+using UnityEngine;
+using System;
+
+public class PlayerHands : MonoBehaviour
+{
+    // Player's hand slots
+    public ItemSO[] hands = new ItemSO[2];
+    public event Action OnHandsChanged;
+    private int newestHand;
+
+    // Function that returns the slot of the most recently picked up item, or -1 if both hands are empty
+    public int GetNewestHand()
+    {
+        if (hands[newestHand] != null) return newestHand;
+        int otherHand = 1 - newestHand;
+        return hands[otherHand] != null ? otherHand : -1;
+    }
+
+    // Function that checks if the player can hold the object
+    public bool CanHold(ItemSO item)
+    {
+        // Returns False if either hands has an item
+        if (item.isLarge) return hands[0] == null && hands[1] == null;
+        // Returns True if either hands is empty
+        return hands[0] == null || hands[1] == null;
+    }
+
+    // Function that places the item in the player's hand(s) if possible
+    public bool TryAddItem(ItemSO item)
+    {
+        // Can't hold the item
+        if (!CanHold(item)) return false;
+        
+        if (item.isLarge) // Takes both slots
+        {
+            hands[0] = hands[1] = item;
+            newestHand = 0;
+        }
+        else if (hands[0] == null) // First slot is empty
+        {
+            hands[0] = item;
+            newestHand = 0;
+        }
+        else // First slot is full
+        {
+            hands[1] = item;
+            newestHand = 1;
+        }
+
+        UpdateHandUI();
+        return true;
+    }
+
+    // Function that removes an item from the player's hand(s) and returns the item
+    public ItemSO RemoveItem(int hand)
+    {
+        ItemSO item = hands[hand];
+        if (item == null) return null; // No item
+
+        if (item.isLarge) // Large item - remove from both hands
+        {
+            hands[0] = hands[1] = null;
+        }
+        else // Remove from given hand
+        {
+            hands[hand] = null;
+        }
+
+        UpdateHandUI();
+        return item;
+    }
+
+    // Updates the UI for the hand slots
+    public void UpdateHandUI()
+    {
+        /* string h0 = hands[0] != null ? hands[0].itemName : "Empty";
+        string h1 = hands[1] != null ? hands[1].itemName : "Empty";
+        Debug.Log($"[HANDS] Slot 0: {h0} | Slot 1: {h1}"); */
+        // ^^ Use when debugging
+        OnHandsChanged?.Invoke(); // ?.Invoke() avoids null reference crashes
+    }
+}

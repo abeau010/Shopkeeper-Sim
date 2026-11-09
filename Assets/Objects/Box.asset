@@ -1,0 +1,21 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4946386aacf1f164193904d1080f6530, type: 3}
+  m_Name: Box
+  m_EditorClassIdentifier: Assembly-CSharp::ItemSO
+  itemID: 1
+  itemName: Box
+  icon: {fileID: 7482667652216324306, guid: b9dd232e37cb8bb4fb98b30e51a73ea7, type: 3}
+  iconColor: {r: 0.381132, g: 0.18019871, b: 0.036674958, a: 1}
+  isLarge: 1
+  basePrice: 15
+  currentPrice: 15
