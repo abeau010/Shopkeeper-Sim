@@ -38,14 +38,31 @@ public class PlayerInteraction : MonoBehaviour
         if (hand < 0) return;
 
         ItemSO item = playerHands.hands[hand];
-        foreach (Shelf shelf in FindObjectsByType<Shelf>())
+        Collider2D[] hits = Physics2D.OverlapCircleAll(transform.position, interactRadius, interactableLayer);
+        bool foundShelfInRange = false;
+
+        foreach (Collider2D hit in hits)
         {
-            foreach (ShelfSlot slot in shelf.slots)
+            if (hit.TryGetComponent(out Shelf shelf))
             {
-                if (slot.item == item && shelf.TryReturn(slot, playerHands)) return;
+                foundShelfInRange = true;
+                foreach (ShelfSlot slot in shelf.slots)
+                {
+                    if (slot.item == item && shelf.TryReturn(slot, playerHands)) return;
+                }
             }
         }
-        controlsUI.ShowMessage($"No room on the shelf for {item.itemName}");
+
+        if (foundShelfInRange)
+        {
+            controlsUI.ShowMessage($"No room on the shelf for {item.itemName}");
+        }
+        else
+        {
+            controlsUI.ShowMessage("Must be near a shelf to return an item");
+
+        }
+        
     }
 
     private void TryInteract() {

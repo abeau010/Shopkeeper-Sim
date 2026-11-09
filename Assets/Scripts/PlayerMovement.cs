@@ -23,7 +23,8 @@ public class PlayerMovement : MonoBehaviour
         movementInput = value.Get<Vector2>();
     }
 
-    // Moves the player character in the correct direction (stands still while picking a price or a list item, those menus use the movement keys)
+    // Moves the player character in the correct direction (stands still while picking a price or a list item, those menus use 
+    // the movement keys)
     private void FixedUpdate()
     {
         rb.linearVelocity = PriceSelectUI.IsOpen || ListMenu.IsOpen ? Vector2.zero : movementInput * moveSpeed;
