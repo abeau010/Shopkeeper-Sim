@@ -4,6 +4,7 @@ using System.Text;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using TMPro;
+using Unity.VisualScripting;
 
 // One line in a ListMenu
 public class ListMenuRow
@@ -50,6 +51,14 @@ public class ListMenu : MonoBehaviour
         Refresh();
     }
 
+    public void SetLabelVisible(bool visible) 
+    {
+        if (label != null) 
+        {
+            label.gameObject.SetActive(visible);
+        }
+    }
+
     public void Open(PlayerHands hands)
     {
         if (Current != null) return;
@@ -67,6 +76,7 @@ public class ListMenu : MonoBehaviour
         message = "";
         firstVisible = 0;
         KeepSelectedVisible();
+        SetLabelVisible(true);
         Draw();
     }
 
@@ -167,12 +177,12 @@ public class ListMenu : MonoBehaviour
     {
         var go = new GameObject("List");
         go.transform.SetParent(transform, false);
-        go.transform.localPosition = new Vector3(0f, 0.6f, 0f);
+        go.transform.localPosition = new Vector3(-0.5f, 0.6f, 0f);
         var list = go.AddComponent<TextMeshPro>();
         list.fontSize = 3.2f;
         list.alignment = TextAlignmentOptions.BottomLeft;
-        list.rectTransform.pivot = new Vector2(0.5f, 0f);
-        list.rectTransform.sizeDelta = new Vector2(2.9f, 2.5f);
+        list.rectTransform.pivot = new Vector2(0f, 0f);
+        list.rectTransform.sizeDelta = new Vector2(3.5f, 2.5f);
         list.sortingOrder = 90;
         return list;
     }

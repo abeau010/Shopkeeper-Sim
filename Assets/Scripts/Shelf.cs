@@ -26,6 +26,14 @@ public class Shelf : MonoBehaviour, IInteractable
         menu.Init(shelfName, BuildRows);
     }
 
+    private void Start() 
+    {
+        if (menu != null)
+        {
+            menu.SetLabelVisible(false);
+        }
+    }
+
     // Opens the list so the player can pick an item
     public void Interact(PlayerHands playerHands)
     {
@@ -58,6 +66,29 @@ public class Shelf : MonoBehaviour, IInteractable
             }
         }
         return false;
+    }
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (collision.GetComponent<PlayerHands>() != null)
+        {
+            if (menu != null)
+            {
+                menu.SetLabelVisible(true);
+            }
+        }
+    }
+
+    private void OnTriggerExit2D(Collider2D collision)
+    {
+        if (collision.GetComponent<PlayerHands>() != null)
+        {
+            if (menu != null)
+            {
+                menu.Close();
+                menu.SetLabelVisible(false);
+            }
+        }
     }
 
     // One row per item, then a "Put back" row for each held item this shelf stocks
