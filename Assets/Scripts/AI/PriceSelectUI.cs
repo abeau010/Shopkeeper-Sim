@@ -12,7 +12,6 @@ public class PriceSelectUI : MonoBehaviour
     public static PriceSelectUI Instance { get; private set; }
     public static bool IsOpen => Instance != null && Instance.CurrentCustomer != null; // Used to lock player movement/interaction
 
-    [SerializeField] private bool showStatsHud = true;     // Money/reputation in the top-left corner
     [SerializeField] private float closeDelay = 2.5f;      // How long the reaction stays up after a sale/exit
     [SerializeField] private int maxPrice = 999;
 
@@ -42,23 +41,6 @@ public class PriceSelectUI : MonoBehaviour
         }
         Instance = this;
         BuildUI();
-    }
-
-    private void Start()
-    {
-        if (ShopManager.Instance != null)
-        {
-            ShopManager.Instance.OnStatsChanged += RefreshStats;
-        }
-        RefreshStats();
-    }
-
-    private void OnDestroy()
-    {
-        if (ShopManager.Instance != null)
-        {
-            ShopManager.Instance.OnStatsChanged -= RefreshStats;
-        }
     }
 
     private void Update()
@@ -222,12 +204,6 @@ public class PriceSelectUI : MonoBehaviour
 
     private void RefreshPrice() => priceText.text = $"${price}";
 
-    private void RefreshStats()
-    {
-        if (statsText == null || ShopManager.Instance == null) return;
-        statsText.text = $"${ShopManager.Instance.Money}   Reputation: {ShopManager.Instance.Reputation:0}%";
-    }
-
     private void SetButtonsEnabled(bool enabled)
     {
         waitingForReply = !enabled;
@@ -258,12 +234,6 @@ public class PriceSelectUI : MonoBehaviour
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920, 1080);
         scaler.matchWidthOrHeight = 0.5f;
-
-        if (showStatsHud)
-        {
-            statsText = CreateText("Stats", canvasGO.transform, 32, TextAlignmentOptions.TopLeft);
-            SetRect(statsText.rectTransform, new Vector2(0, 1), new Vector2(0, 1), new Vector2(30, -80), new Vector2(700, -20));
-        }
 
         panel = new GameObject("Price Panel", typeof(RectTransform), typeof(Image));
         panel.SetActive(false);

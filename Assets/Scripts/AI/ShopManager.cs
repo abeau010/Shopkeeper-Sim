@@ -1,19 +1,11 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
-using TMPro;
 
 // Tracks money and customer reputation, and tells the AI what the shop sells
 public class ShopManager : MonoBehaviour
 {
     public static ShopManager Instance { get; private set; }
-
-    [SerializeField] private int startingMoney = 0;
-    [SerializeField] private TextMeshProUGUI statsText; // Optional - shows money/reputation
-
-    public int Money { get; private set; }
-    public float Reputation { get; private set; } = 50f; // Moves with how much each customer's mood changed during their visit
-    public event Action OnStatsChanged;
 
     private Shelf[] shelves;
 
@@ -25,14 +17,12 @@ public class ShopManager : MonoBehaviour
             return;
         }
         Instance = this;
-        Money = startingMoney;
     }
 
     // Find all shelves in the scene and update stats text on startup
     private void Start()
     {
         shelves = FindObjectsByType<Shelf>();
-        RefreshUI();
     }
 
     // Uses the current price if set, otherwise the base price
@@ -61,32 +51,20 @@ public class ShopManager : MonoBehaviour
 
     public void AddMoney(int amount)
     {
-        Money += amount;
-        RefreshUI();
+        ShopHUD.Instance.ModifyMoney(amount);
     }
 
     // Returns false and spends nothing if the player can't afford it
     public bool TrySpendMoney(int amount)
     {
-        if (Money < amount) return false;
-        Money -= amount;
-        RefreshUI();
+        if (ShopHUD.Instance.GetMoney() < amount) return false;
+        ShopHUD.Instance.ModifyMoney(-amount);
         return true;
     }
 
     // Called when a customer leaves for any reason
     public void RecordCustomerExit(int moodChange)
     {
-        Reputation = Mathf.Clamp(Reputation + moodChange, 0f, 100f);
-        RefreshUI();
-    }
-
-    private void RefreshUI()
-    {
-        if (statsText != null)
-        {
-            statsText.text = $"${Money}   Reputation: {Reputation:0}%";
-        }
-        OnStatsChanged?.Invoke();
+        ShopHUD.Instance.ModifySatisfaction(moodChange);
     }
 }
