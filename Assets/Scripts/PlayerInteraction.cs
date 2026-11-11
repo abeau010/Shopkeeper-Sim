@@ -13,7 +13,7 @@ public class PlayerInteraction : MonoBehaviour
 
     private void Awake()
     {
-        controlsUI = gameObject.AddComponent<ControlsUI>();
+        controlsUI = FindAnyObjectByType<ControlsUI>();
     }
 
     private void Update()
@@ -31,7 +31,7 @@ public class PlayerInteraction : MonoBehaviour
         }
     }
 
-    // Sends the most recently picked up item back to its shelf from anywhere in the shop
+    // Sends the most recently picked up item back to its shelf
     private void ReturnNewestItem()
     {
         int hand = playerHands.GetNewestHand();

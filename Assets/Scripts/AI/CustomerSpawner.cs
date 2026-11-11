@@ -101,9 +101,10 @@ public class CustomerSpawner : MonoBehaviour
         sr.sprite = Sprite.Create(Texture2D.whiteTexture, new Rect(0, 0, 4, 4), new Vector2(0.5f, 0.5f), 4f);
         sr.sortingOrder = 5;
 
-        // Trigger so the player can walk through customers but still interact with them
         var col = go.AddComponent<BoxCollider2D>();
-        col.isTrigger = true;
+        var colInteract = go.AddComponent<CircleCollider2D>();
+        colInteract.isTrigger = true;
+        colInteract.radius = 1.5f;
 
         return go.AddComponent<Customer>();
     }
