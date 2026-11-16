@@ -1,5 +1,7 @@
 # Tests for the AI server - the LLM is faked so these run without Ollama
 # Run with: pytest -v
+import time
+
 import pytest
 import requests
 from fastapi.testclient import TestClient
@@ -28,6 +30,17 @@ def spawn(character_id="jeff", budget=None):
 def offer(customer, item, price):
     return client.post(f"/customers/{customer['session_id']}/offer",
                        json={"item": item, "price": price, "shop_items": SHOP})
+
+
+def reaction(customer, offer_id):
+    return client.get(f"/customers/{customer['session_id']}/reaction/{offer_id}")
+
+
+def slow_llm(seconds):
+    def answer(prompt):
+        time.sleep(seconds)
+        return "Too slow."
+    return answer
 
 
 def test_characters_listed():
@@ -63,7 +76,7 @@ def test_offer_within_budget_sells():
     r = offer(c, "Apple", 4).json()
     assert r["outcome"] == "accept" and r["sale"] is True
     assert r["sale_item"] == "Apple" and r["sale_price"] == 4
-    assert r["say"] == "Fake reaction."
+    assert r["say"] == server.FALLBACK_LINES["accept"]  # backup line until the reaction is fetched
     assert r["leaving"] is True and r["status"] == "bought"
 
 
@@ -106,9 +119,43 @@ def test_ollama_down_uses_fallback_line(monkeypatch):
         raise requests.ConnectionError()
     monkeypatch.setattr(server, "ask_llm", boom)
     c = spawn("rose", budget=4)
-    r = offer(c, "Apple", 5).json()
+    r = reaction(c, offer(c, "Apple", 5).json()["offer_id"]).json()
     assert r["ai_online"] is False
     assert "$4" in r["say"]  # fallback counter line still states the counter price
+
+
+def test_reaction_returns_llm_line():
+    c = spawn("jeff", budget=5)
+    r = offer(c, "Apple", 4).json()
+    assert reaction(c, r["offer_id"]).json() == {"offer_id": 1, "say": "Fake reaction.", "ai_online": True}
+
+
+def test_sale_does_not_wait_for_slow_llm(monkeypatch):
+    monkeypatch.setattr(server, "ask_llm", slow_llm(5))
+    c = spawn("jeff", budget=5)
+    start = time.monotonic()
+    r = offer(c, "Apple", 4).json()
+    assert time.monotonic() - start < 1
+    assert r["sale"] is True and r["status"] == "bought"
+
+
+def test_slow_llm_gives_up_and_uses_fallback(monkeypatch):
+    monkeypatch.setattr(server, "LLM_TIMEOUT", 0.2)
+    monkeypatch.setattr(server, "ask_llm", slow_llm(1))
+    c = spawn("rose", budget=4)
+    offer_id = offer(c, "Apple", 5).json()["offer_id"]
+    start = time.monotonic()
+    r = reaction(c, offer_id).json()
+    assert time.monotonic() - start < 0.8
+    assert r["ai_online"] is False and "$4" in r["say"]
+
+
+def test_old_reaction_replaced_by_newer_offer():
+    c = spawn("rose", budget=4)
+    first = offer(c, "Apple", 100).json()
+    second = offer(c, "Apple", 100).json()
+    assert reaction(c, first["offer_id"]).status_code == 410
+    assert reaction(c, second["offer_id"]).status_code == 200
 
 
 def test_ban_and_remove():

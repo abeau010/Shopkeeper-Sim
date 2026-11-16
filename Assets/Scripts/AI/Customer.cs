@@ -12,6 +12,9 @@ public class Customer : MonoBehaviour, IInteractable
     public CustomerData Data { get; private set; }
     public bool IsLeaving => state == State.WalkingOut;
     public bool CanServe => state == State.Waiting;
+    public int LastOfferId { get; set; } // Newest offer, so a late reaction to an older one is ignored
+    public float PatienceLeft => Mathf.Max(0f, patienceSeconds - waitTimer);
+    public bool IsBeingServed => PriceSelectUI.Instance != null && PriceSelectUI.Instance.CurrentCustomer == this;
 
     private State state;
     private Vector3 standPosition;
@@ -63,7 +66,7 @@ public class Customer : MonoBehaviour, IInteractable
         Data.status = newData.status;
         Data.offers_left = newData.offers_left;
         waitTimer = 0f; // Being helped restarts their patience
-        Say(newData.say);
+        if (!string.IsNullOrEmpty(newData.say)) Say(newData.say); // GET /customers/{id} has no line, keep the last one
     }
 
     public void Say(string line)
@@ -96,7 +99,7 @@ public class Customer : MonoBehaviour, IInteractable
                 break;
             case State.Waiting:
                 // Patience only runs out while the player isn't picking a price for them
-                if (PriceSelectUI.Instance != null && PriceSelectUI.Instance.CurrentCustomer == this) break;
+                if (IsBeingServed) break;
                 waitTimer += Time.deltaTime;
                 if (waitTimer >= patienceSeconds)
                 {

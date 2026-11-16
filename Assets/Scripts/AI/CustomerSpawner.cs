@@ -14,8 +14,6 @@ public class SpawnLevel
 // Asks the AI server for a new customer whenever there's room in the shop, with a short gap between arrivals
 public class CustomerSpawner : MonoBehaviour
 {
-    private const float FirstSpawnDelay = 2f;
-
     [Header("Spawning")]
     [SerializeField] private Customer customerPrefab;      // Optional - a placeholder square is used if empty
     [SerializeField] private string[] characterIds;        // Leave empty for random characters from the server
@@ -35,7 +33,7 @@ public class CustomerSpawner : MonoBehaviour
     [SerializeField] private Vector2 standAreaSize = new Vector2(6f, 1.5f);
 
     private readonly List<Customer> customers = new List<Customer>();
-    private float spawnTimer = FirstSpawnDelay; // Only counts down while there's room in the shop
+    private float spawnTimer; // Starts at 0 so the first customer comes in as soon as the server is ready, then only counts down while there's room
     private bool serverReady;
     private bool waitingOnServer;
 
@@ -43,6 +41,12 @@ public class CustomerSpawner : MonoBehaviour
 
     // For a future level/day system
     public void SetLevel(int level) => currentLevel = Mathf.Clamp(level, 0, levels.Length - 1);
+
+    // The countdown at the top of the screen builds itself, so no scene setup is needed
+    private void Awake()
+    {
+        gameObject.AddComponent<PatienceClockUI>().Init(customers);
+    }
 
     // Check the server is up before spawning anyone
     private void Start()

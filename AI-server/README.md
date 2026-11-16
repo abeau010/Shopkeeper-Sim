@@ -13,7 +13,8 @@ The LLM runs locally through [Ollama](https://ollama.com), so no API key or inte
    - **counter**: the price is a bit over budget. The customer names the price they'd pay.
    - **reject**: the price is way over budget.
    - **wrong_item**: the player brought the wrong item.
-5. The **LLM writes the customer's reaction** in character, based on that outcome.
+5. Unity applies the result straight away (money, item, hint) and shows a backup line.
+6. Unity then asks for the **LLM's reaction** in character, and swaps it in when it arrives. The sale never waits on the LLM.
 
 Each customer only hears a limited number of offers (`max_offers` in `characters.py`) before leaving.
 
@@ -21,9 +22,14 @@ Each customer only hears a limited number of offers (`max_offers` in `characters
 Unity (C#)                               Python (this folder)                    Ollama
 CustomerSpawner ── POST /customers/spawn ──▶ picks character, item, budget
 PriceSelectUI ──── POST /customers/{id}/offer ─▶ judge_offer() decides outcome
-                                              reaction_prompt() ──────────────▶ llama3.2:3b
-               ◀── say / outcome / sale ──────────────────────────── reaction ◀┘
+               ◀── outcome / sale / offer_id / backup line ── (no LLM, answers right away)
+PriceSelectUI ──── GET /customers/{id}/reaction/{offer_id} ─▶ reaction_prompt() ──▶ llama3.2:3b
+               ◀── say / ai_online ──────────── LLM line, or backup line after 10s ◀┘
 ```
+
+Timeouts are ordered so each side gives up in the right order: the server stops waiting for the LLM after
+`LLM_TIMEOUT` (10s), Unity waits 15s for a reaction, and 10s for every other request (none of them use the LLM).
+If an offer request fails, Unity checks `GET /customers/{id}` before letting the player retry, in case the sale went through.
 
 ## Setup (one time)
 
@@ -65,9 +71,10 @@ In `sell_cli.py`, type offers as `Apple 5`. Other commands: `/ban` and `/quit`.
 | GET | `/health` | Server status, and whether Ollama and the model are available |
 | GET | `/characters` | List of character templates |
 | POST | `/customers/spawn` | `{character_id?, shop_items?}` → new customer with their request (`say`), wanted item, colour |
-| POST | `/customers/{id}/offer` | `{item, price, shop_items?}` → reaction, outcome, counter-offer, sale result |
+| POST | `/customers/{id}/offer` | `{item, price, shop_items?}` → outcome, counter-offer, sale result, `offer_id`, backup line |
+| GET | `/customers/{id}/reaction/{offer_id}` | The LLM's in-character line for that offer (backup line if Ollama is down or slow). `410` if a newer offer replaced it |
 | POST | `/customers/{id}/ban` | Kick the customer out |
-| GET | `/customers/{id}` | Current state (debugging) |
+| GET | `/customers/{id}` | Current state (Unity uses it to recover after a failed offer) |
 | DELETE | `/customers/{id}` | Forget a customer (Unity calls this when one despawns) |
 | POST | `/reset` | Clear all customers |
 
