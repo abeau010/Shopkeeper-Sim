@@ -122,6 +122,14 @@ public class AIServerClient : MonoBehaviour
     public void RemoveCustomer(string sessionId) =>
         StartCoroutine(Send<CustomerData>("DELETE", $"/customers/{sessionId}", null, requestTimeoutSeconds, null, null));
 
+    // Clears every customer on the server - Unity can't remove its own when Play stops, since this object is destroyed too
+    public void ResetCustomers(Action onDone) =>
+        StartCoroutine(Send<CustomerData>("POST", "/reset", "{}", requestTimeoutSeconds, _ => onDone?.Invoke(), error =>
+        {
+            Debug.LogWarning($"[AI] {error}");
+            onDone?.Invoke();
+        }));
+
     private IEnumerator Send<T>(string method, string path, string json, int timeoutSeconds, Action<T> onSuccess, Action<string> onError)
     {
         using var request = new UnityWebRequest(serverUrl + path, method);

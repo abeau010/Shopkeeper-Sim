@@ -53,14 +53,17 @@ python server.py        # or: uvicorn server:app --port 8000 --reload
 
 Open http://127.0.0.1:8000/docs to try every endpoint in the browser.
 
-Environment overrides: `OLLAMA_MODEL` (for example `qwen2.5:7b-instruct`), `OLLAMA_URL`, `PORT`.
+Environment overrides: `OLLAMA_MODEL` (for example `qwen2.5:7b-instruct`), `OLLAMA_URL`, `PORT`,
+and `SIMULATED_LLM_DELAY` (seconds, makes the LLM slow on purpose for testing).
 
 ## Test
 
 ```bash
-pytest -v                    # unit tests, LLM is faked (Ollama not needed)
+pytest -v                    # unit + Unity contract tests, LLM is faked (Ollama not needed)
 python sell_cli.py vinnie    # sell to a real customer in the terminal (server must be running)
 ```
+
+See [TESTING.md](TESTING.md) for the integration checklist (Unity + server, with Ollama up, down and slow).
 
 In `sell_cli.py`, type offers as `Apple 5`. Other commands: `/ban` and `/quit`.
 
@@ -70,13 +73,13 @@ In `sell_cli.py`, type offers as `Apple 5`. Other commands: `/ban` and `/quit`.
 |---|---|---|
 | GET | `/health` | Server status, and whether Ollama and the model are available |
 | GET | `/characters` | List of character templates |
-| POST | `/customers/spawn` | `{character_id?, shop_items?}` → new customer with their request (`say`), wanted item, colour |
+| POST | `/customers/spawn` | `{character_id?, shop_items?}` → new customer with their request (`say`), wanted item, colour. A random pick skips characters already in the shop; `409` if that character (or everyone) is already there |
 | POST | `/customers/{id}/offer` | `{item, price, shop_items?}` → outcome, counter-offer, sale result, `offer_id`, backup line |
 | GET | `/customers/{id}/reaction/{offer_id}` | The LLM's in-character line for that offer (backup line if Ollama is down or slow). `410` if a newer offer replaced it |
 | POST | `/customers/{id}/ban` | Kick the customer out |
 | GET | `/customers/{id}` | Current state (Unity uses it to recover after a failed offer) |
 | DELETE | `/customers/{id}` | Forget a customer (Unity calls this when one despawns) |
-| POST | `/reset` | Clear all customers |
+| POST | `/reset` | Clear all customers (Unity calls this when Play starts) |
 
 ## Adding a character
 

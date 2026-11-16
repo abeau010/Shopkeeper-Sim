@@ -60,7 +60,8 @@ public class CustomerSpawner : MonoBehaviour
         AIServerClient.Instance.CheckHealth(
             health =>
             {
-                serverReady = true;
+                // Clear customers left over from the last Play session, or they'd count as already in the shop
+                AIServerClient.Instance.ResetCustomers(() => serverReady = true);
                 if (!health.ollama_reachable) Debug.LogWarning("[AI] Server is up but can't reach Ollama - run `ollama serve`.");
                 else if (!health.model_installed) Debug.LogWarning($"[AI] Ollama model missing - run `ollama pull {health.model}`.");
                 else Debug.Log($"[AI] Connected to AI server ({health.model}).");
@@ -80,9 +81,12 @@ public class CustomerSpawner : MonoBehaviour
 
     private void SpawnCustomer()
     {
-        string characterId = characterIds != null && characterIds.Length > 0
-            ? characterIds[Random.Range(0, characterIds.Length)]
-            : "";
+        string characterId = PickCharacterId();
+        if (characterId == null) // Everyone on the list is already in the shop
+        {
+            ResetSpawnTimer();
+            return;
+        }
         ShopItemData[] items = ShopManager.Instance != null ? ShopManager.Instance.GetShopItems() : null;
 
         waitingOnServer = true;
@@ -107,6 +111,19 @@ public class CustomerSpawner : MonoBehaviour
     }
 
     private void ResetSpawnTimer() => spawnTimer = Random.Range(Level.minSpawnDelay, Level.maxSpawnDelay);
+
+    // Picks from characterIds, skipping anyone already in the shop. "" lets the server pick, null means nobody on the list is free
+    private string PickCharacterId()
+    {
+        if (characterIds == null || characterIds.Length == 0) return "";
+        var available = new List<string>();
+        foreach (string id in characterIds)
+        {
+            if (!customers.Exists(c => string.Equals(c.Data.character_id, id, System.StringComparison.OrdinalIgnoreCase)))
+                available.Add(id);
+        }
+        return available.Count > 0 ? available[Random.Range(0, available.Count)] : null;
+    }
 
     private Vector3 RandomStandPosition()
     {

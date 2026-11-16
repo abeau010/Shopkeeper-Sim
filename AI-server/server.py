@@ -8,6 +8,7 @@ import json
 import os
 import random
 import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as LLMTimeout
 
@@ -20,6 +21,7 @@ from characters import CHARACTERS
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")  # local ollama install
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")  # model being used currently - subject to change
 LLM_TIMEOUT = 10  # total seconds to wait for a reaction line - must stay below Unity's reactionTimeoutSeconds (15)
+SIMULATED_LLM_DELAY = float(os.getenv("SIMULATED_LLM_DELAY", "0"))  # extra seconds before each LLM call, for testing a slow LLM
 MAX_SESSIONS = 50  # oldest customers are dropped past this so memory doesn't grow forever
 COUNTER_RANGE = 1.5  # offers up to budget * this get a counter-offer, anything higher is rejected outright
 
@@ -122,6 +124,8 @@ Reply ONLY with JSON: {{"say": "..."}}"""
 
 # Sends the prompt to Ollama and returns the customer's line (raises on network/parse failure)
 def ask_llm(prompt):
+    if SIMULATED_LLM_DELAY:
+        time.sleep(SIMULATED_LLM_DELAY)
     r = requests.post(
         f"{OLLAMA_URL}/api/chat",
         json={
@@ -144,6 +148,12 @@ def ask_llm_capped(prompt):
 
 def fallback_line(customer, outcome, counter, leaving):
     return FALLBACK_LINES["leave" if leaving else outcome].format(counter=counter, wants=customer["wants"])
+
+
+# Characters with a session, i.e. still in the shop (they may be walking out - Unity deletes the session once they're gone)
+def characters_in_shop():
+    with sessions_lock:
+        return {c["character_id"] for c in sessions.values()}
 
 
 def get_customer(session_id):
@@ -187,9 +197,17 @@ def list_characters():
 # A new customer walks into the shop and says what they want
 @app.post("/customers/spawn")
 def spawn_customer(req: SpawnRequest):
-    character_id = req.character_id.lower() or random.choice(list(CHARACTERS))
+    in_shop = characters_in_shop()
+    character_id = req.character_id.lower()
+    if not character_id:
+        available = [cid for cid in CHARACTERS if cid not in in_shop]
+        if not available:
+            raise HTTPException(status_code=409, detail="Every character is already in the shop")
+        character_id = random.choice(available)
     if character_id not in CHARACTERS:
         raise HTTPException(status_code=404, detail=f"Unknown character '{req.character_id}'")
+    if character_id in in_shop:
+        raise HTTPException(status_code=409, detail=f"{CHARACTERS[character_id]['name']} is already in the shop")
     character = CHARACTERS[character_id]
     items = shop_items_or_default(req.shop_items)
     item = pick_wanted_item(character, items)
