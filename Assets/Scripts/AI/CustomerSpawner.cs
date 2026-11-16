@@ -1,15 +1,33 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-// Periodically asks the AI server for a new customer and spawns them at the door
+// Difficulty for one level - harder levels let more customers into the shop at once
+[System.Serializable]
+public class SpawnLevel
+{
+    public int maxCustomers = 1;
+    public float patienceSeconds = 30f; // How long a customer waits to be helped before leaving
+    public float minSpawnDelay = 5f;    // Gap before the next customer comes in
+    public float maxSpawnDelay = 10f;
+}
+
+// Asks the AI server for a new customer whenever there's room in the shop, with a short gap between arrivals
 public class CustomerSpawner : MonoBehaviour
 {
+    private const float FirstSpawnDelay = 2f;
+
     [Header("Spawning")]
     [SerializeField] private Customer customerPrefab;      // Optional - a placeholder square is used if empty
-    [SerializeField] private float firstSpawnDelay = 2f;
-    [SerializeField] private float spawnInterval = 25f;
-    [SerializeField] private int maxCustomers = 3;
     [SerializeField] private string[] characterIds;        // Leave empty for random characters from the server
+
+    [Header("Levels")]
+    [SerializeField] private int currentLevel;             // Index into levels, can be changed during Play
+    [SerializeField] private SpawnLevel[] levels =
+    {
+        new SpawnLevel { maxCustomers = 1 },
+        new SpawnLevel { maxCustomers = 2 },
+        new SpawnLevel { maxCustomers = 3, patienceSeconds = 25f, minSpawnDelay = 4f, maxSpawnDelay = 8f },
+    };
 
     [Header("Positions")]
     [SerializeField] private Transform exitPoint;          // Where customers enter/leave - defaults to this object
@@ -17,14 +35,18 @@ public class CustomerSpawner : MonoBehaviour
     [SerializeField] private Vector2 standAreaSize = new Vector2(6f, 1.5f);
 
     private readonly List<Customer> customers = new List<Customer>();
-    private float timer;
+    private float spawnTimer = FirstSpawnDelay; // Only counts down while there's room in the shop
     private bool serverReady;
     private bool waitingOnServer;
+
+    public SpawnLevel Level => levels[Mathf.Clamp(currentLevel, 0, levels.Length - 1)];
+
+    // For a future level/day system
+    public void SetLevel(int level) => currentLevel = Mathf.Clamp(level, 0, levels.Length - 1);
 
     // Check the server is up before spawning anyone
     private void Start()
     {
-        timer = spawnInterval - firstSpawnDelay;
         if (AIServerClient.Instance == null)
         {
             Debug.LogError("[AI] No AIServerClient in the scene - add one to use CustomerSpawner.");
@@ -46,14 +68,10 @@ public class CustomerSpawner : MonoBehaviour
     {
         if (!serverReady || waitingOnServer) return;
         customers.RemoveAll(c => c == null);
-        if (customers.Count >= maxCustomers) return;
+        if (customers.Count >= Level.maxCustomers) return; // Timer waits until someone has walked out
 
-        timer += Time.deltaTime;
-        if (timer >= spawnInterval)
-        {
-            timer = 0f;
-            SpawnCustomer();
-        }
+        spawnTimer -= Time.deltaTime;
+        if (spawnTimer <= 0f) SpawnCustomer();
     }
 
     private void SpawnCustomer()
@@ -72,15 +90,19 @@ public class CustomerSpawner : MonoBehaviour
                 Customer customer = customerPrefab != null
                     ? Instantiate(customerPrefab, exit, Quaternion.identity)
                     : CreatePlaceholderCustomer(exit);
-                customer.Init(data, RandomStandPosition(), exit);
+                customer.Init(data, RandomStandPosition(), exit, Level.patienceSeconds);
                 customers.Add(customer);
+                ResetSpawnTimer();
             },
             error =>
             {
                 waitingOnServer = false;
+                ResetSpawnTimer(); // Try again after the usual gap
                 Debug.LogWarning($"[AI] Couldn't spawn customer: {error}");
             });
     }
+
+    private void ResetSpawnTimer() => spawnTimer = Random.Range(Level.minSpawnDelay, Level.maxSpawnDelay);
 
     private Vector3 RandomStandPosition()
     {

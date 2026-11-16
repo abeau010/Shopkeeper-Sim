@@ -7,8 +7,7 @@ public class Customer : MonoBehaviour, IInteractable
     private enum State { WalkingIn, Waiting, WalkingOut }
 
     [SerializeField] private float moveSpeed = 2f;
-    [SerializeField] private float patienceSeconds = 120f; // Leaves unhappy if not served this long
-    [SerializeField] private TextMeshPro speechLabel;      // Optional - created automatically if empty
+    [SerializeField] private TextMeshPro speechLabel;      // Optional 
 
     public CustomerData Data { get; private set; }
     public bool IsLeaving => state == State.WalkingOut;
@@ -18,13 +17,15 @@ public class Customer : MonoBehaviour, IInteractable
     private Vector3 standPosition;
     private Vector3 exitPosition;
     private float waitTimer;
+    private float patienceSeconds; // Set by the spawner's current level, leaves unhappy if not helped this long
     private bool exitRecorded;
     private int startingSatisfaction;
 
     // Called by CustomerSpawner right after the server creates this customer
-    public void Init(CustomerData data, Vector3 standPos, Vector3 exitPos)
+    public void Init(CustomerData data, Vector3 standPos, Vector3 exitPos, float patience)
     {
         Data = data;
+        patienceSeconds = patience;
         startingSatisfaction = data.satisfaction;
         standPosition = standPos;
         exitPosition = exitPos;
@@ -61,6 +62,7 @@ public class Customer : MonoBehaviour, IInteractable
         Data.satisfaction = newData.satisfaction;
         Data.status = newData.status;
         Data.offers_left = newData.offers_left;
+        waitTimer = 0f; // Being helped restarts their patience
         Say(newData.say);
     }
 
