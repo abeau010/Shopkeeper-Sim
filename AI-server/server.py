@@ -1,13 +1,16 @@
 # AI server that the Unity game talks to over HTTP (see Assets/Scripts/AI/AIServerClient.cs)
 # Python handles the AI side; Unity spawns customers and sends price offers here
 # The server decides whether an offer is accepted (so sales are reliable), and the LLM writes the customer's reaction
+# The sale and the reaction are separate calls so a slow LLM never holds up the sale
 # Uses a local Ollama model - requires `brew install ollama` and `ollama pull llama3.2:3b`
 # Run with: python server.py   (or: uvicorn server:app --port 8000 --reload)
 import json
 import os
 import random
 import threading
+import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as LLMTimeout
 
 import requests
 from fastapi import FastAPI, HTTPException
@@ -17,7 +20,8 @@ from characters import CHARACTERS
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")  # local ollama install
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")  # model being used currently - subject to change
-OLLAMA_TIMEOUT = 60
+LLM_TIMEOUT = 10  # total seconds to wait for a reaction line - must stay below Unity's reactionTimeoutSeconds (15)
+SIMULATED_LLM_DELAY = float(os.getenv("SIMULATED_LLM_DELAY", "0"))  # extra seconds before each LLM call, for testing a slow LLM
 MAX_SESSIONS = 50  # oldest customers are dropped past this so memory doesn't grow forever
 COUNTER_RANGE = 1.5  # offers up to budget * this get a counter-offer, anything higher is rejected outright
 
@@ -45,6 +49,9 @@ app = FastAPI(title="Shopkeeper Sim AI Server")
 # Active customers in the shop, keyed by session id
 sessions = {}
 sessions_lock = threading.Lock()
+
+# LLM calls run here so they can be given up on after LLM_TIMEOUT
+llm_pool = ThreadPoolExecutor(max_workers=4)
 
 
 class ShopItem(BaseModel):
@@ -117,6 +124,8 @@ Reply ONLY with JSON: {{"say": "..."}}"""
 
 # Sends the prompt to Ollama and returns the customer's line (raises on network/parse failure)
 def ask_llm(prompt):
+    if SIMULATED_LLM_DELAY:
+        time.sleep(SIMULATED_LLM_DELAY)
     r = requests.post(
         f"{OLLAMA_URL}/api/chat",
         json={
@@ -126,10 +135,25 @@ def ask_llm(prompt):
             "stream": False,
             "options": {"temperature": 0.9, "num_predict": 80},
         },
-        timeout=OLLAMA_TIMEOUT,
+        timeout=(3, LLM_TIMEOUT),  # connect, then per socket read - ask_llm_capped limits the total
     )
     r.raise_for_status()
     return str(json.loads(r.json()["message"]["content"])["say"]).strip()
+
+
+# Runs ask_llm with a hard cap on the total time (raises LLMTimeout past LLM_TIMEOUT)
+def ask_llm_capped(prompt):
+    return llm_pool.submit(ask_llm, prompt).result(timeout=LLM_TIMEOUT)
+
+
+def fallback_line(customer, outcome, counter, leaving):
+    return FALLBACK_LINES["leave" if leaving else outcome].format(counter=counter, wants=customer["wants"])
+
+
+# Characters with a session, i.e. still in the shop (they may be walking out - Unity deletes the session once they're gone)
+def characters_in_shop():
+    with sessions_lock:
+        return {c["character_id"] for c in sessions.values()}
 
 
 def get_customer(session_id):
@@ -173,9 +197,17 @@ def list_characters():
 # A new customer walks into the shop and says what they want
 @app.post("/customers/spawn")
 def spawn_customer(req: SpawnRequest):
-    character_id = req.character_id.lower() or random.choice(list(CHARACTERS))
+    in_shop = characters_in_shop()
+    character_id = req.character_id.lower()
+    if not character_id:
+        available = [cid for cid in CHARACTERS if cid not in in_shop]
+        if not available:
+            raise HTTPException(status_code=409, detail="Every character is already in the shop")
+        character_id = random.choice(available)
     if character_id not in CHARACTERS:
         raise HTTPException(status_code=404, detail=f"Unknown character '{req.character_id}'")
+    if character_id in in_shop:
+        raise HTTPException(status_code=409, detail=f"{CHARACTERS[character_id]['name']} is already in the shop")
     character = CHARACTERS[character_id]
     items = shop_items_or_default(req.shop_items)
     item = pick_wanted_item(character, items)
@@ -199,7 +231,8 @@ def spawn_customer(req: SpawnRequest):
     return {**public_state(customer), "say": character["greeting"].format(item=item["name"])}
 
 
-# Shopkeeper hands over an item at a chosen price - returns the customer's reaction and whether it sold
+# Shopkeeper hands over an item at a chosen price - returns whether it sold straight away, without waiting for the LLM
+# The in-character line comes from GET /customers/{id}/reaction/{offer_id}, until then "say" is a backup line
 @app.post("/customers/{session_id}/offer")
 def make_offer(session_id: str, req: OfferRequest):
     customer = get_customer(session_id)
@@ -221,28 +254,43 @@ def make_offer(session_id: str, req: OfferRequest):
         customer["status"] = "left"
     leaving = customer["status"] != "shopping"
 
-    ai_online = True
-    try:
-        say = ask_llm(reaction_prompt(customer, req.item, price, listed_price, outcome, counter, leaving and not sale))
-    except requests.RequestException:
-        ai_online, say = False, ""
-    except (json.JSONDecodeError, ValueError, TypeError, KeyError):
-        say = ""
-    if not say:
-        key = "leave" if leaving and not sale else outcome
-        say = FALLBACK_LINES[key].format(counter=counter, wants=customer["wants"])
+    # Saved for the reaction call - only the newest offer's reaction can be fetched
+    walking_out = leaving and not sale
+    customer["reaction"] = {
+        "offer_id": len(customer["offers"]),
+        "prompt": reaction_prompt(customer, req.item, price, listed_price, outcome, counter, walking_out),
+        "fallback": fallback_line(customer, outcome, counter, walking_out),
+    }
 
     return {
         **public_state(customer),
-        "say": say,
+        "say": customer["reaction"]["fallback"],
+        "offer_id": customer["reaction"]["offer_id"],
         "outcome": outcome,  # accept | counter | reject | wrong_item
         "counter_offer": counter,
         "sale": sale,
         "sale_item": customer["wants"] if sale else "",
         "sale_price": price if sale else 0,
         "leaving": leaving,
-        "ai_online": ai_online,
     }
+
+
+# The customer's in-character line for an offer, written by the LLM (or the backup line if it's down or too slow)
+@app.get("/customers/{session_id}/reaction/{offer_id}")
+def get_reaction(session_id: str, offer_id: int):
+    customer = get_customer(session_id)
+    reaction = customer.get("reaction")
+    if reaction is None or reaction["offer_id"] != offer_id:
+        raise HTTPException(status_code=410, detail=f"Offer {offer_id} has been replaced by a newer one")
+
+    ai_online = True
+    try:
+        say = ask_llm_capped(reaction["prompt"])
+    except (requests.RequestException, LLMTimeout):
+        ai_online, say = False, ""
+    except (json.JSONDecodeError, ValueError, TypeError, KeyError):
+        say = ""
+    return {"offer_id": offer_id, "say": say or reaction["fallback"], "ai_online": ai_online}
 
 
 # Shopkeeper kicks the customer out

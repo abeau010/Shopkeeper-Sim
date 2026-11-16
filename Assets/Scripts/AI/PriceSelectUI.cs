@@ -12,6 +12,8 @@ public class PriceSelectUI : MonoBehaviour
     public static PriceSelectUI Instance { get; private set; }
     public static bool IsOpen => Instance != null && Instance.CurrentCustomer != null; // Used to lock player movement/interaction
 
+    private const string OfflineWarning = "  <color=#E74C3C>(Ollama offline or slow - using backup lines)</color>";
+
     [SerializeField] private bool showStatsHud = true;     // Money/reputation in the top-left corner
     [SerializeField] private float closeDelay = 2.5f;      // How long the reaction stays up after a sale/exit
     [SerializeField] private int maxPrice = 999;
@@ -131,7 +133,9 @@ public class PriceSelectUI : MonoBehaviour
         AIServerClient.Instance.MakeOffer(customer.Data.session_id, item.itemName, offeredPrice, items,
             reply =>
             {
+                // The sale, hint and buttons don't wait for the LLM - reply.say is a backup line until the reaction arrives
                 ApplyReply(customer, hands, item, reply);
+                if (customer != null) FetchReaction(customer, reply.offer_id);
                 if (CurrentCustomer != customer) return; // Closed while waiting
 
                 reactionText.text = $"<b>{customer.Data.name}:</b> \"{reply.say}\"";
@@ -148,9 +152,8 @@ public class PriceSelectUI : MonoBehaviour
             error =>
             {
                 Debug.LogWarning($"[AI] {error}");
-                if (CurrentCustomer != customer) return;
-                reactionText.text = "<i>(Couldn't reach the AI server. Is it running?)</i>";
-                SetButtonsEnabled(true);
+                // The server may have handled the offer even though its reply was lost, so check before allowing a retry
+                Recover(customer, hands, item, offeredPrice);
             });
     }
 
@@ -159,20 +162,82 @@ public class PriceSelectUI : MonoBehaviour
     {
         if (reply.sale)
         {
-            for (int i = 0; i < hands.hands.Length; i++)
-            {
-                if (hands.hands[i] == item)
-                {
-                    hands.RemoveItem(i);
-                    break;
-                }
-            }
+            RemoveFromHands(hands, item);
             if (ShopManager.Instance != null) ShopManager.Instance.AddMoney(reply.sale_price);
         }
 
         if (customer == null) return;
+        customer.LastOfferId = reply.offer_id;
         customer.UpdateData(reply);
         if (reply.leaving) customer.Leave();
+    }
+
+    private static void RemoveFromHands(PlayerHands hands, ItemSO item)
+    {
+        for (int i = 0; i < hands.hands.Length; i++)
+        {
+            if (hands.hands[i] == item)
+            {
+                hands.RemoveItem(i);
+                return;
+            }
+        }
+    }
+
+    // Swaps the backup line for the LLM's in-character one when it arrives
+    private void FetchReaction(Customer customer, int offerId)
+    {
+        AIServerClient.Instance.GetReaction(customer.Data.session_id, offerId,
+            reaction =>
+            {
+                if (customer == null || customer.LastOfferId != offerId) return; // Walked out, or a newer offer replaced this one
+                customer.Say(reaction.say);
+                if (CurrentCustomer != customer) return;
+                reactionText.text = $"<b>{customer.Data.name}:</b> \"{reaction.say}\"";
+                if (!reaction.ai_online) hintText.text += OfflineWarning;
+            },
+            error => Debug.Log($"[AI] Keeping the backup line: {error}")); // e.g. the customer already walked out
+    }
+
+    // After a failed offer, asks the server what actually happened so a lost "accepted" reply can't leave the customer stuck
+    private void Recover(Customer customer, PlayerHands hands, ItemSO item, int offeredPrice)
+    {
+        if (customer == null) return;
+        AIServerClient.Instance.GetCustomer(customer.Data.session_id,
+            state =>
+            {
+                if (customer == null) return;
+                bool lostSale = state.status == "bought" && customer.Data.status != "bought";
+                if (lostSale)
+                {
+                    // An accepted offer always sells at the price offered
+                    RemoveFromHands(hands, item);
+                    if (ShopManager.Instance != null) ShopManager.Instance.AddMoney(offeredPrice);
+                }
+                customer.UpdateData(state);
+                bool stillShopping = state.status == "shopping";
+                if (!stillShopping) customer.Leave();
+
+                if (CurrentCustomer != customer) return;
+                RefreshInfo();
+                if (stillShopping)
+                {
+                    reactionText.text = "<i>(The AI server didn't answer. Try again.)</i>";
+                    SetButtonsEnabled(true);
+                    return;
+                }
+                hintText.text = lostSale
+                    ? $"<color=#2ECC71>SOLD {item.itemName} for ${offeredPrice}!</color>"
+                    : $"<color=#E74C3C>{state.name} is leaving.</color>";
+                StartCoroutine(CloseAfterDelay());
+            },
+            error =>
+            {
+                Debug.LogWarning($"[AI] {error}");
+                if (CurrentCustomer != customer) return;
+                reactionText.text = "<i>(Couldn't reach the AI server. Is it running?)</i>";
+                SetButtonsEnabled(true);
+            });
     }
 
     private void Ban()
@@ -202,15 +267,14 @@ public class PriceSelectUI : MonoBehaviour
 
     private static string GetHint(OfferResponseData reply, ItemSO item)
     {
-        string warning = reply.ai_online ? "" : "  <color=#E74C3C>(Ollama offline - using backup lines)</color>";
         switch (reply.outcome)
         {
-            case "accept": return $"<color=#2ECC71>SOLD {reply.sale_item} for ${reply.sale_price}!</color>{warning}";
-            case "wrong_item": return $"<color=#F1C40F>{reply.name} wants a {reply.wants}, not a {item.itemName}.</color>{warning}";
+            case "accept": return $"<color=#2ECC71>SOLD {reply.sale_item} for ${reply.sale_price}!</color>";
+            case "wrong_item": return $"<color=#F1C40F>{reply.name} wants a {reply.wants}, not a {item.itemName}.</color>";
         }
-        if (reply.leaving) return $"<color=#E74C3C>{reply.name} gave up and is leaving.</color>{warning}";
-        if (reply.outcome == "counter") return $"Counter-offer: ${reply.counter_offer}. Press Enter to accept or pick another price.{warning}";
-        return $"Too expensive. Try a lower price.{warning}";
+        if (reply.leaving) return $"<color=#E74C3C>{reply.name} gave up and is leaving.</color>";
+        if (reply.outcome == "counter") return $"Counter-offer: ${reply.counter_offer}. Press Enter to accept or pick another price.";
+        return "Too expensive. Try a lower price.";
     }
 
     private void RefreshInfo()
