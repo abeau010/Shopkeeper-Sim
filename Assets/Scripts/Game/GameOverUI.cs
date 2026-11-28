@@ -2,7 +2,7 @@ using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
-// "You Win" / "You Lose" screen with a Play Again button. Added by GameManager, shown when the round ends.
+// "You Win" / "You Lose" screen with Play Again (same level) and Main Menu buttons. Added by GameManager, shown when the round ends.
 public class GameOverUI : MonoBehaviour
 {
     private GameManager game;
@@ -27,7 +27,9 @@ public class GameOverUI : MonoBehaviour
         titleText.text = round.State == RoundState.Won
             ? "<color=#2ECC71>You Win!</color>"
             : "<color=#E74C3C>You Lose</color>";
+        string level = game.Difficulty != null ? game.Difficulty.Name : "";
         detailText.text = $"{round.EndReason}\n\n" +
+                          $"Level: {level}\n" +
                           $"Earned: ${round.TotalEarned} (need over ${round.Rules.WinMoney})\n" +
                           $"Reputation: {round.Reputation:0}% (need {round.Rules.LoseReputation:0}%+)\n" +
                           $"Time left: {Round.FormatTime(round.TimeLeft)}";
@@ -51,12 +53,14 @@ public class GameOverUI : MonoBehaviour
         titleText.fontStyle = FontStyles.Bold;
         RuntimeUI.SetRect(titleText.rectTransform, top, Vector2.one, new Vector2(20, -140), new Vector2(-20, -30));
 
-        detailText = RuntimeUI.CreateText("Details", box.transform, 30, TextAlignmentOptions.Top);
-        RuntimeUI.SetRect(detailText.rectTransform, Vector2.zero, Vector2.one, new Vector2(30, 120), new Vector2(-30, -150));
+        detailText = RuntimeUI.CreateText("Details", box.transform, 28, TextAlignmentOptions.Top);
+        RuntimeUI.SetRect(detailText.rectTransform, Vector2.zero, Vector2.one, new Vector2(30, 115), new Vector2(-30, -145));
 
-        Button playAgain = RuntimeUI.CreateButton("Play Again", box.transform, new Color(0.18f, 0.55f, 0.34f), () => game.Restart());
         Vector2 bottomCenter = new Vector2(0.5f, 0);
-        RuntimeUI.SetRect((RectTransform)playAgain.transform, bottomCenter, bottomCenter, new Vector2(-120, 30), new Vector2(120, 100));
+        Button playAgain = RuntimeUI.CreateButton("Play Again", box.transform, new Color(0.18f, 0.55f, 0.34f), () => game.Restart());
+        RuntimeUI.SetRect((RectTransform)playAgain.transform, bottomCenter, bottomCenter, new Vector2(-250, 30), new Vector2(-10, 100));
+        Button mainMenu = RuntimeUI.CreateButton("Main Menu", box.transform, new Color(0.3f, 0.3f, 0.38f), () => game.ReturnToMenu());
+        RuntimeUI.SetRect((RectTransform)mainMenu.transform, bottomCenter, bottomCenter, new Vector2(10, 30), new Vector2(250, 100));
 
         screen.SetActive(false);
     }

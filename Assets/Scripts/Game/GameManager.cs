@@ -2,20 +2,20 @@ using System;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-// Connects a Round to the scene: feeds it time and shop stats, freezes gameplay when it ends, and restarts the scene.
-// Adds itself to any scene with a ShopManager, along with its timer and end-screen UI, so no scene setup is needed.
-// Add it to a GameObject by hand to change the settings in the Inspector.
+// Connects a Round to the scene: holds gameplay on the main menu, starts the round for the chosen level,
+// feeds it time and shop stats, freezes gameplay when it ends, and reloads the scene.
+// Adds itself to any scene with a ShopManager, along with its menu, timer and end-screen UI, so no scene setup is needed.
 public class GameManager : MonoBehaviour
 {
     public static GameManager Instance { get; private set; }
     public static bool IsGameOver => Instance != null && Instance.Round != null && Instance.Round.IsOver;
 
-    [SerializeField] private float roundSeconds = 180f;   // Length of the round
-    [SerializeField] private int winMoney = 50;           // Total sales must go over this to win
-    [SerializeField] private float loseReputation = 20f;  // Reputation below this loses
+    public Difficulty Difficulty { get; private set; }
+    public Round Round { get; private set; } // Null until a level is picked
+    public event Action RoundStarted;
+    public event Action<Round> GameEnded;
 
-    public Round Round { get; private set; }
-    public event Action<Round> GameEnded; // UI listens to this
+    private bool skipMenu;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void AutoCreate()
@@ -38,19 +38,22 @@ public class GameManager : MonoBehaviour
             return;
         }
         Instance = this;
-        Time.timeScale = 1f; // In case the last round ended paused
-
-        Round = new Round(new RoundRules(roundSeconds, winMoney, loseReputation));
-        Round.Ended += OnRoundEnded;
 
         gameObject.AddComponent<RoundTimerUI>().Init(this);
         gameObject.AddComponent<GameOverUI>().Init(this);
+        MainMenuUI menu = gameObject.AddComponent<MainMenuUI>();
+        menu.Init(this);
+
+        // Hold everything until a level is picked. Done in Awake so customers don't start arriving behind the menu.
+        SetGameplayActive(false);
+        skipMenu = GameSession.ConsumeSkipMenu();
+        if (!skipMenu) menu.Show();
     }
 
     private void Start()
     {
         if (ShopManager.Instance != null) ShopManager.Instance.OnStatsChanged += SendStatsToRound;
-        SendStatsToRound();
+        if (skipMenu) StartRound(GameSession.SelectedDifficulty); // Play Again goes straight back in on the same level
     }
 
     private void OnDestroy()
@@ -63,30 +66,63 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    private void Update() => Round.Tick(Time.deltaTime);
+    private void Update() => Round?.Tick(Time.deltaTime);
+
+    // Called by the main menu
+    public void StartRound(Difficulty difficulty)
+    {
+        if (Round != null) return;
+
+        Difficulty = difficulty;
+        GameSession.SelectedDifficulty = difficulty;
+        Round = new Round(difficulty.CreateRules());
+        Round.Ended += OnRoundEnded;
+        SendStatsToRound();
+
+        foreach (CustomerSpawner spawner in FindObjectsByType<CustomerSpawner>())
+        {
+            spawner.SetSpawnRateMultiplier(difficulty.SpawnRateMultiplier);
+            spawner.SetMaxCustomers(difficulty.MaxCustomers);
+        }
+        SetGameplayActive(true);
+        RoundStarted?.Invoke();
+    }
 
     private void SendStatsToRound()
     {
         ShopManager shop = ShopManager.Instance;
-        if (shop != null) Round.UpdateStats(shop.Reputation, shop.TotalEarned);
+        if (Round != null && shop != null) Round.UpdateStats(shop.Reputation, shop.TotalEarned);
     }
 
     private void OnRoundEnded(Round round)
     {
-        FreezeGameplay();
+        SetGameplayActive(false);
         GameEnded?.Invoke(round);
     }
 
-    // Stops the player, customers and timers once the round is over
-    private static void FreezeGameplay()
+    // Pauses or resumes the player, customers and timers
+    private static void SetGameplayActive(bool active)
     {
-        Time.timeScale = 0f;
-        if (PriceSelectUI.Instance != null) PriceSelectUI.Instance.Close();
-        foreach (PlayerInteraction player in FindObjectsByType<PlayerInteraction>()) player.enabled = false;
-        foreach (CustomerSpawner spawner in FindObjectsByType<CustomerSpawner>()) spawner.enabled = false;
+        Time.timeScale = active ? 1f : 0f;
+        if (!active && PriceSelectUI.Instance != null) PriceSelectUI.Instance.Close();
+        foreach (PlayerInteraction player in FindObjectsByType<PlayerInteraction>()) player.enabled = active;
+        foreach (CustomerSpawner spawner in FindObjectsByType<CustomerSpawner>()) spawner.enabled = active;
     }
 
+    // Same level again, skipping the menu
     public void Restart()
+    {
+        GameSession.SkipMenuOnNextLoad = true;
+        ReloadScene();
+    }
+
+    public void ReturnToMenu()
+    {
+        GameSession.SkipMenuOnNextLoad = false;
+        ReloadScene();
+    }
+
+    private static void ReloadScene()
     {
         Time.timeScale = 1f;
         Scene scene = SceneManager.GetActiveScene();
