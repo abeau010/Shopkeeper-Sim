@@ -39,19 +39,27 @@ public class CustomerData
     public int satisfaction;
     public string status;
     public int offers_left;
-    public string say; // What the customer just said (greeting, reaction, or ban line)
+    public string say; // What the customer just said (greeting, backup reaction, or ban line) - empty from GET /customers/{id}
 }
 
 [Serializable]
 public class OfferResponseData : CustomerData
 {
+    public int offer_id; // Used to fetch this offer's LLM reaction
     public string outcome; // accept | counter | reject | wrong_item
     public int counter_offer;
     public bool sale;
     public string sale_item;
     public int sale_price;
     public bool leaving;
-    public bool ai_online;
+}
+
+[Serializable]
+public class ReactionData
+{
+    public int offer_id;
+    public string say;
+    public bool ai_online; // False when the server used a backup line because Ollama was down or too slow
 }
 
 [Serializable]
@@ -69,7 +77,9 @@ public class AIServerClient : MonoBehaviour
     public static AIServerClient Instance { get; private set; }
 
     [SerializeField] private string serverUrl = "http://127.0.0.1:8000";
-    [SerializeField] private int timeoutSeconds = 60;
+    // Only the reaction call waits on the LLM, so every other call should answer quickly
+    [SerializeField] private int requestTimeoutSeconds = 10;
+    [SerializeField] private int reactionTimeoutSeconds = 15; // Must stay above LLM_TIMEOUT in server.py (10s) so its backup line arrives in time
 
     private void Awake()
     {
@@ -82,28 +92,45 @@ public class AIServerClient : MonoBehaviour
     }
 
     public void CheckHealth(Action<HealthData> onSuccess, Action<string> onError) =>
-        StartCoroutine(Send("GET", "/health", null, onSuccess, onError));
+        StartCoroutine(Send("GET", "/health", null, requestTimeoutSeconds, onSuccess, onError));
 
     public void SpawnCustomer(string characterId, ShopItemData[] shopItems, Action<CustomerData> onSuccess, Action<string> onError)
     {
         var body = new SpawnRequestData { character_id = characterId ?? "", shop_items = shopItems };
-        StartCoroutine(Send("POST", "/customers/spawn", JsonUtility.ToJson(body), onSuccess, onError));
+        StartCoroutine(Send("POST", "/customers/spawn", JsonUtility.ToJson(body), requestTimeoutSeconds, onSuccess, onError));
     }
 
+    // Returns the outcome right away - the in-character line comes from GetReaction
     public void MakeOffer(string sessionId, string item, int price, ShopItemData[] shopItems, Action<OfferResponseData> onSuccess, Action<string> onError)
     {
         var body = new OfferRequestData { item = item, price = price, shop_items = shopItems };
-        StartCoroutine(Send("POST", $"/customers/{sessionId}/offer", JsonUtility.ToJson(body), onSuccess, onError));
+        StartCoroutine(Send("POST", $"/customers/{sessionId}/offer", JsonUtility.ToJson(body), requestTimeoutSeconds, onSuccess, onError));
     }
 
+    // The LLM's line for an offer, can take several seconds
+    public void GetReaction(string sessionId, int offerId, Action<ReactionData> onSuccess, Action<string> onError) =>
+        StartCoroutine(Send("GET", $"/customers/{sessionId}/reaction/{offerId}", null, reactionTimeoutSeconds, onSuccess, onError));
+
+    // The server's current view of a customer, used to recover when an offer's reply is lost
+    public void GetCustomer(string sessionId, Action<CustomerData> onSuccess, Action<string> onError) =>
+        StartCoroutine(Send("GET", $"/customers/{sessionId}", null, requestTimeoutSeconds, onSuccess, onError));
+
     public void BanCustomer(string sessionId, Action<CustomerData> onSuccess, Action<string> onError) =>
-        StartCoroutine(Send("POST", $"/customers/{sessionId}/ban", "{}", onSuccess, onError));
+        StartCoroutine(Send("POST", $"/customers/{sessionId}/ban", "{}", requestTimeoutSeconds, onSuccess, onError));
 
     // Fire and forget - tells the server to forget a customer that left
     public void RemoveCustomer(string sessionId) =>
-        StartCoroutine(Send<CustomerData>("DELETE", $"/customers/{sessionId}", null, null, null));
+        StartCoroutine(Send<CustomerData>("DELETE", $"/customers/{sessionId}", null, requestTimeoutSeconds, null, null));
 
-    private IEnumerator Send<T>(string method, string path, string json, Action<T> onSuccess, Action<string> onError)
+    // Clears every customer on the server - Unity can't remove its own when Play stops, since this object is destroyed too
+    public void ResetCustomers(Action onDone) =>
+        StartCoroutine(Send<CustomerData>("POST", "/reset", "{}", requestTimeoutSeconds, _ => onDone?.Invoke(), error =>
+        {
+            Debug.LogWarning($"[AI] {error}");
+            onDone?.Invoke();
+        }));
+
+    private IEnumerator Send<T>(string method, string path, string json, int timeoutSeconds, Action<T> onSuccess, Action<string> onError)
     {
         using var request = new UnityWebRequest(serverUrl + path, method);
         if (json != null)

@@ -12,6 +12,7 @@ public class ShopManager : MonoBehaviour
     [SerializeField] private TextMeshProUGUI statsText; // Optional - shows money/reputation
 
     public int Money { get; private set; }
+    public int TotalEarned { get; private set; } // Money made from sales this round - spending on supplies doesn't lower it
     public float Reputation { get; private set; } = 50f; // Moves with how much each customer's mood changed during their visit
     public event Action OnStatsChanged;
 
@@ -62,6 +63,7 @@ public class ShopManager : MonoBehaviour
     public void AddMoney(int amount)
     {
         Money += amount;
+        if (amount > 0) TotalEarned += amount;
         RefreshUI();
     }
 

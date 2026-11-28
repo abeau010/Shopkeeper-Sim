@@ -33,7 +33,8 @@ def main():
             continue
 
         r = requests.post(f"{SERVER}/customers/{sid}/offer", json={"item": item, "price": price}).json()
-        print(f"{name}: {r['say']}")
+        reaction = requests.get(f"{SERVER}/customers/{sid}/reaction/{r['offer_id']}").json()
+        print(f"{name}: {reaction['say']}")
         print(f"   [{r['outcome']} | mood {r['satisfaction']} | offers left {r['offers_left']}"
               f"{' | counter $' + str(r['counter_offer']) if r['counter_offer'] else ''}]")
         if r["sale"]:

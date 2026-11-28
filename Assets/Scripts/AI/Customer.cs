@@ -7,24 +7,28 @@ public class Customer : MonoBehaviour, IInteractable
     private enum State { WalkingIn, Waiting, WalkingOut }
 
     [SerializeField] private float moveSpeed = 2f;
-    [SerializeField] private float patienceSeconds = 120f; // Leaves unhappy if not served this long
-    [SerializeField] private TextMeshPro speechLabel;      // Optional - created automatically if empty
+    [SerializeField] private TextMeshPro speechLabel;      // Optional 
 
     public CustomerData Data { get; private set; }
     public bool IsLeaving => state == State.WalkingOut;
     public bool CanServe => state == State.Waiting;
+    public int LastOfferId { get; set; } // Newest offer, so a late reaction to an older one is ignored
+    public float PatienceLeft => Mathf.Max(0f, patienceSeconds - waitTimer);
+    public bool IsBeingServed => PriceSelectUI.Instance != null && PriceSelectUI.Instance.CurrentCustomer == this;
 
     private State state;
     private Vector3 standPosition;
     private Vector3 exitPosition;
     private float waitTimer;
+    private float patienceSeconds; // Set by the spawner's current level, leaves unhappy if not helped this long
     private bool exitRecorded;
     private int startingSatisfaction;
 
     // Called by CustomerSpawner right after the server creates this customer
-    public void Init(CustomerData data, Vector3 standPos, Vector3 exitPos)
+    public void Init(CustomerData data, Vector3 standPos, Vector3 exitPos, float patience)
     {
         Data = data;
+        patienceSeconds = patience;
         startingSatisfaction = data.satisfaction;
         standPosition = standPos;
         exitPosition = exitPos;
@@ -61,7 +65,8 @@ public class Customer : MonoBehaviour, IInteractable
         Data.satisfaction = newData.satisfaction;
         Data.status = newData.status;
         Data.offers_left = newData.offers_left;
-        Say(newData.say);
+        waitTimer = 0f; // Being helped restarts their patience
+        if (!string.IsNullOrEmpty(newData.say)) Say(newData.say); // GET /customers/{id} has no line, keep the last one
     }
 
     public void Say(string line)
@@ -94,7 +99,7 @@ public class Customer : MonoBehaviour, IInteractable
                 break;
             case State.Waiting:
                 // Patience only runs out while the player isn't picking a price for them
-                if (PriceSelectUI.Instance != null && PriceSelectUI.Instance.CurrentCustomer == this) break;
+                if (IsBeingServed) break;
                 waitTimer += Time.deltaTime;
                 if (waitTimer >= patienceSeconds)
                 {
