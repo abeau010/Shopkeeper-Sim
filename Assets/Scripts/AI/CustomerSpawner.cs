@@ -36,11 +36,23 @@ public class CustomerSpawner : MonoBehaviour
     private float spawnTimer; // Starts at 0 so the first customer comes in as soon as the server is ready, then only counts down while there's room
     private bool serverReady;
     private bool waitingOnServer;
+    private float spawnRateMultiplier = 1f; // Set by the chosen difficulty - 3 means customers arrive 3x as often
+    private int maxCustomersOverride;       // Set by the chosen difficulty - 0 means use the level's maxCustomers
+
+    public int MaxCustomers => maxCustomersOverride > 0 ? maxCustomersOverride : Level.maxCustomers;
 
     public SpawnLevel Level => levels[Mathf.Clamp(currentLevel, 0, levels.Length - 1)];
 
     // For a future level/day system
     public void SetLevel(int level) => currentLevel = Mathf.Clamp(level, 0, levels.Length - 1);
+
+    public void SetSpawnRateMultiplier(float multiplier) => spawnRateMultiplier = multiplier > 0f ? multiplier : 1f;
+
+    // How many customers can be in the shop at once. 0 or less goes back to the level's own limit.
+    public void SetMaxCustomers(int max) => maxCustomersOverride = Mathf.Max(0, max);
+
+    // Shortens the gap between customers: a 3x spawn rate turns a 9s gap into 3s
+    public static float ScaleDelay(float delay, float multiplier) => multiplier > 0f ? delay / multiplier : delay;
 
     // The countdown at the top of the screen builds itself, so no scene setup is needed
     private void Awake()
@@ -73,7 +85,7 @@ public class CustomerSpawner : MonoBehaviour
     {
         if (!serverReady || waitingOnServer) return;
         customers.RemoveAll(c => c == null);
-        if (customers.Count >= Level.maxCustomers) return; // Timer waits until someone has walked out
+        if (customers.Count >= MaxCustomers) return; // Timer waits until someone has walked out
 
         spawnTimer -= Time.deltaTime;
         if (spawnTimer <= 0f) SpawnCustomer();
@@ -110,7 +122,8 @@ public class CustomerSpawner : MonoBehaviour
             });
     }
 
-    private void ResetSpawnTimer() => spawnTimer = Random.Range(Level.minSpawnDelay, Level.maxSpawnDelay);
+    private void ResetSpawnTimer() =>
+        spawnTimer = ScaleDelay(Random.Range(Level.minSpawnDelay, Level.maxSpawnDelay), spawnRateMultiplier);
 
     // Picks from characterIds, skipping anyone already in the shop. "" lets the server pick, null means nobody on the list is free
     private string PickCharacterId()
